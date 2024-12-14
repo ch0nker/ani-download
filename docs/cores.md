@@ -7,46 +7,22 @@ You can create custom cores by writing a Lua script and saving it in the followi
 The Lua file should implement functions for searching and downloading anime. Here's an example script for the `nyaa` core:
 ```lua
 local qbit = require("qbit")
+local config = require("config")
 
-local config = nil
-local config_path = system_paths.configs .. "/nyaa.json"
+config.default_config = {
+    page_size = 10
+}
+
 local current_page = 1
-
-local function get_config(reload)
-    if config ~= nil and not reload then
-        return config
-    end
-
-    local file = io.open(config_path, "r")
-
-    if file then
-        local text = file:read("*a")
-        file:close()
-
-        config = json.decode(text)
-        return config
-    else
-        file = io.open(config_path, "w")
-
-        config = {
-            page_size = 10,
-        }
-
-        file:write(json.encode(config))
-        file:close()
-        return config
-    end
-end
 
 local function get_torrent(torrents)
     local page = 1
     local option
-    config = get_config()
+    local page_size = config.get("page_size")
 
     while true do
         os.execute("clear")
 
-        local page_size = config.page_size
         local total_torrents = #torrents
         local max_pages = math.ceil(total_torrents / page_size)
         page = math.max(1, math.min(page, max_pages))
@@ -101,7 +77,7 @@ local function download(title)
 
     for _, elm in next, torrent_elms.children do
         local title_elm = elm:xpath(".//td[@colspan=\"2\"]/a[not(@class=\"comments\")]")[1]
-        local comments_elm = elm:xpath(".//td[@colspan=\"2\"]/a[@class=\"comments\")][1]
+        local comments_elm = elm:xpath(".//td[@colspan=\"2\"]/a[@class=\"comments\"]")[1]
         local comments = 0
 
         if comments_elm then
@@ -153,5 +129,4 @@ return {
     version = "0.0.1",
     type = "torrent",
     download = download
-}
-```
+}```
