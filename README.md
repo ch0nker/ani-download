@@ -8,7 +8,7 @@ To install, run the install.sh script:
 ```
 
 ## Lua Libraries
-This project includes a collection of built-in Lua libraries to enhance functionality: collection of builtin libraries.
+This project includes a collection of built-in Lua libraries to enhance functionality.
 
 - [JSON](./docs/json.md) - Library for encoding and decoding JSON.
 - [Requests](./docs/requests.md) - HTTP request handling library.
