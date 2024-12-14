@@ -71,14 +71,12 @@ int lua_node_search(lua_State* L) {
     xmlNodePtr node = (xmlNodePtr)lua_touserdata(L, -1);
     lua_pop(L, 1);
 
-    // Create a new XPath context for each evaluation
     xmlXPathContextPtr ctx = xmlXPathNewContext(node->doc);
     if (ctx == NULL) {
         luaL_error(L, "Failed to create XPath context.");
         return 0;
     }
 
-    // Set the context node for each XPath evaluation
     if (xmlXPathSetContextNode(node, ctx) != 0) {
         xmlXPathFreeContext(ctx);
         luaL_error(L, "Failed to set context node.");
@@ -94,12 +92,11 @@ int lua_node_search(lua_State* L) {
         return 1;
     }
 
-    // Iterate over the result nodes
     for (int i = 0; i < obj->nodesetval->nodeNr; i++) {
         xmlNodePtr node = obj->nodesetval->nodeTab[i];
         if (node) {
-            populate_node_table(L, node);  // Populate the node's data into the Lua table
-            lua_rawseti(L, -2, i + 1);     // Store the node result in the Lua table
+            populate_node_table(L, node);
+            lua_rawseti(L, -2, i + 1);
         }
     }
 
