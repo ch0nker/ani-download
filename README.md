@@ -5,4 +5,4 @@ A personal CLI tool for downloading torrents
 A collection of builtin libraries.
 - [JSON](./docs/json.md)
 - [Requests](./docs/requests.md)
-- [HTML](./docs/hmtl.md)
+- [HTML](./docs/html.md)
