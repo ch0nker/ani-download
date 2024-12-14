@@ -8,10 +8,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBXML2 REQUIRED libxml-2.0)
 
-#file(GLOB LUA_SOURCES "include/lua/*.c")
 file(GLOB CXX_SOURCES "src/*.c*" "src/lua/*.c*")
 message(STATUS "C++ Sources: ${CXX_SOURCES}")
-message(STATUS "Lua Sources: ${LUA_SOURCES}")
 
 add_executable(download ${CXX_SOURCES} ${LUA_SOURCES})
 
