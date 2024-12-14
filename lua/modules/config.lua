@@ -19,6 +19,10 @@ function module:new(name, default_config)
             return rawget(this, "__config")[index]
         end,
         __newindex = function(this, index, value)
+            if type(value) == "function" then
+                rawset(this, index, value)
+                return
+            end
             local config = rawget(this, "__config")
 
             config[index] = value
