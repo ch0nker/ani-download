@@ -1,70 +1,75 @@
 local module = {
-    loaded_config = nil,
-    default_config = {}
+    configs = {}
 }
 
-function module.update_config(tbl, depth)
-    for key, value in next, depth or module.default_config do
-        if not tbl[key] then
-            tbl[key] = value
+function module:new(name, default_config)
+    local config = setmetatable({
+        __default = default_config or {},
+        __config = {},
+        __config_path = string.format("%s/%s.json", system_paths.configs, name)
+    }, {
+        __index = function(this, index)
+            local val = rawget(this, index)
+            if type(val) == "function" then
+                return val
+            end
+
+            return rawget(this, "__config")[index]
+        end,
+        __newindex = function(this, index, value)
+            local config = rawget(this, "__config")
+
+            config[index] = value
+
+            local file = io.open(rawget(this, "__config_path"), "w")
+            assert(file, "Failed to open config.")
+            file:write(json.decode(config))
+            file:close()
+        end
+    })
+
+    function config.update_config(tbl, depth)
+        local default_cfg = rawget(config, "__default")
+        depth = depth or default_cfg
+
+        for key, value in next, depth do
+            if not tbl[key] then
+                tbl[key] = value
+            end
+
+            if type(value) == "table" then
+                tbl[key] = config.update_config(tbl[key], value)
+            end
         end
 
-        if type(value) == "table" then
-            tbl[key] = module.update_config(tbl[key], value)
-        end
+        return tbl
     end
 
-    return tbl
-end
+    function config.set_default(cfg)
+        rawset(config, "__default", cfg)
+    end
 
-function module.get_config()
-    if module.loaded_config ~= nil then return module.loaded_config end
+    local config_path = rawget(config, "__config_path")
 
-    local file = io.open(module.config_path)
+    local file = io.open(config_path, "r")
     if file then
         local text = file:read("*a")
         file:close()
 
-        module.loaded_config = module.update_config(json.decode(text))
+        rawset(config, "__config", config.update_config(json.decode(text)))
+    else
+        file = io.open(config_path, "w")
+        assert(file, "Failed to open " .. config_path)
 
-        return module.loaded_config
+        local cfg = rawget(config, "__default")
+        file:write(json.encode(cfg))
+        file:close()
+        rawset(config, "__config", cfg)
     end
 
-    file = io.open(module.config_path, "w")
-    assert(file, "Failed to open " .. module.config_path)
+    module.configs[name] = config
 
-    module.loaded_config = module.default_config
-    file:write(json.encode(module.loaded_config))
-    file:close()
-
-    return module.loaded_config
-end
-
-function module.get(key)
-    local traceback = debug.traceback()
-    module.caller_path = traceback:match(".-/config.lua:%d+: in function 'config%.get'%s*\n%s*(.-):%d+:")
-    module.caller_script = module.caller_path and module.caller_path:match("([^/]+)%.lua$")
-    module.config_path = string.format("%s/%s.json", system_paths.configs, module.caller_script)
-
-    local config = module.get_config()
-
-    return config and config[key]
-end
-
-function module.set(key, value)
-    local traceback = debug.traceback()
-    module.caller_path = traceback:match(".-/config.lua:%d+: in function 'config%.set'%s*\n%s*(.-):%d+:")
-    module.caller_script = module.caller_path and module.caller_path:match("([^/]+)%.lua$")
-    module.config_path = string.format("%s/%s.json", system_paths.configs, module.caller_script)
-
-    local config = module.get_config()
-
-    config[key] = value
-
-    local file = io.open(module.config_path, "w")
-    assert(file, "Failed to open " .. module.config_path)
-    file:write(json.encode(config))
-    file:close()
+    return config
 end
 
 return module

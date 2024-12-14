@@ -1,15 +1,13 @@
-local config = require("config")
-local module = {
-    cookie = nil,
-}
-
-config.default_config = {
+local config = require("config"):new("qbit", {
     login = {
         username = "admin",
         password = "admin",
     },
     api_url = "http://localhost:8080/api/v2",
     download_dir = system_paths.home .. "/Anime/Series"
+})
+local module = {
+    cookie = nil,
 }
 
 function module.authenticate()
@@ -17,7 +15,7 @@ function module.authenticate()
         return module.cookie
     end
 
-    local login = config.get("login")
+    local login = config.login
 
     local response = requests.post({
         url = config.api_url .. "/auth/login",
@@ -40,7 +38,7 @@ function module.request(data)
         module.authenticate()
     end
 
-    data.url = config.get("api_url") .. "/" .. data.endpoint
+    data.url = config.api_url .. "/" .. data.endpoint
     data.endpoint = nil
     if not data.headers then
         data.headers = {}
@@ -66,7 +64,7 @@ end
 function module.download_magnet(magnet)
     return module.post({
         endpoint = "torrents/add",
-        body = "urls=" .. magnet .. "&savepath=" .. config.get("download_dir"),
+        body = "urls=" .. magnet .. "&savepath=" .. config.download_dir,
         headers = {
             ["Content-Type"] = "application/x-www-form-urlencoded"
         }
