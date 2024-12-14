@@ -3,6 +3,8 @@ local module = {
 }
 
 function module:new(name, default_config)
+    if self.configs[name] then return self.configs[name] end
+
     local config = setmetatable({
         __default = default_config or {},
         __config = {},
@@ -67,7 +69,7 @@ function module:new(name, default_config)
         rawset(config, "__config", cfg)
     end
 
-    module.configs[name] = config
+    self.configs[name] = config
 
     return config
 end
