@@ -2,6 +2,15 @@
 A personal tool for downloading anime.
 
 ## Installation
+### Required Packages
+- libxml
+- lua
+
+```bash
+sudo pacman -S lua libxml2
+```
+
+### Building
 To install, run the install.sh script:
 ```bash
 ./install.sh
