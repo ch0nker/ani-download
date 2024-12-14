@@ -4,7 +4,7 @@ A personal tool for downloading anime.
 ## Installation
 To install, run the install.sh script:
 ```bash
-    ./install.sh
+./install.sh
 ```
 
 ## Lua Libraries
