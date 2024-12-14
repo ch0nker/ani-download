@@ -1,3 +1,5 @@
+local qbit = require("qbit")
+
 local config = nil
 local config_path = system_paths.configs .. "/nyaa.json"
 local current_page = 1

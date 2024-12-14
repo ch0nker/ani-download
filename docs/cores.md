@@ -6,6 +6,8 @@ You can create custom cores by writing a Lua script and saving it in the followi
 
 The Lua file should implement functions for searching and downloading anime. Here's an example script for the `nyaa` core:
 ```lua
+local qbit = require("qbit")
+
 local config = nil
 local config_path = system_paths.configs .. "/nyaa.json"
 local current_page = 1

@@ -75,25 +75,6 @@ void list_cores_func(char*) {
     }
 }
 
-int load_module(lua_State* L, const char* module) {
-    if (luaL_dofile(L, (modules_dir + "/" + module + ".lua").c_str()) != LUA_OK) {
-        const char* error = lua_tostring(L, -1);
-        printf("Error loading module: %s\n", error);
-        lua_pop(L, 1);
-        return 0;
-    }
-
-    if(lua_istable(L, -1)) {
-        lua_setglobal(L, module);
-    } else {
-        printf("Error: return value isn't a table.");
-        lua_pop(L, 1);
-        return 0;
-    }
-
-    return 1;
-}
-
 int load_core(lua_State*L, std::string core) {
     if (luaL_dofile(L, (cores_dir + "/" + core + ".lua").c_str()) != LUA_OK) {
         const char* error = lua_tostring(L, -1);
@@ -171,6 +152,21 @@ Json::Value get_settings() {
     return val;
 }
 
+void add_package_path(lua_State*L, std::string dir) {
+    lua_getglobal(L, "package");
+    lua_getfield(L, -1, "path");
+
+    const char* current_path = lua_tostring(L, -1);
+
+    std::string new_path = std::string(current_path) + ";" + dir + "/?.lua";
+
+    lua_pop(L, 1);
+    lua_pushstring(L, new_path.c_str());
+    lua_setfield(L, -2, "path");
+
+    lua_pop(L, 1);
+}
+
 int main(int argc, char** argv) {
     if(!std::filesystem::is_directory(config_dir)) {
         std::filesystem::create_directory(config_dir);
@@ -197,17 +193,7 @@ int main(int argc, char** argv) {
     load_html_library(L);
     load_system_paths(L);
 
-    for(const auto& entry : std::filesystem::directory_iterator(modules_dir)) {
-        std::filesystem::path path = entry.path();
-        if(path.extension().compare(".lua") != 0)
-            continue;
-
-        const char* module_name = path.filename().replace_extension("").c_str();
-        if(module_name[0] == '.')
-            continue;
-
-        load_module(L, module_name);
-    }
+    add_package_path(L, modules_dir);
 
     if(*argv[0] != '-')
         flags.name = argv[1];
