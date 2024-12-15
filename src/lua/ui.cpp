@@ -8,6 +8,10 @@ extern "C" {
 }
 
 bool initialized = false;
+const char* color_names[] = {
+    "black", "red", "green", "yellow",
+    "blue", "magenta", "cyan", "white"
+};
 
 int lua_get_main_window(lua_State* L) {
     lua_getglobal(L, "ui");
@@ -109,6 +113,7 @@ int lua_move_cursor(lua_State* L) {
     int y = (int)luaL_checknumber(L, 3);
 
     wmove(win, y, x);
+    wrefresh(win);
 
     return 0;
 }
@@ -129,7 +134,7 @@ int lua_set_cursor_type(lua_State* L) {
 int lua_move_window(lua_State* L) {
     WINDOW* win = get_subwindow(L);
     if (!win) {
-        luaL_error(L, "Attempt to move to a null or invalid window");
+        luaL_error(L, "Attempt to move on a null or invalid window");
         return 0;
     }
 
@@ -172,18 +177,92 @@ int lua_move_window(lua_State* L) {
     return 0;
 }
 
+int lua_resize_window(lua_State* L) {
+    WINDOW* win = get_subwindow(L);
+    if (!win) {
+        luaL_error(L, "Attempt to move on a null or invalid window");
+        return 0;
+    }
+
+    int width = (int)luaL_checknumber(L, 2);
+    int height = (int)luaL_checknumber(L, 3);
+
+    lua_pushnumber(L, width);
+    lua_setfield(L, -4, "width");
+
+    lua_pushnumber(L, height);
+    lua_setfield(L, -4, "height");
+
+    wresize(win, height, width);
+
+    wrefresh(win);
+
+    return 0;
+}
+
+int lua_window_set_color(lua_State* L) {
+    WINDOW* win = get_subwindow(L);
+    if (!win) {
+        luaL_error(L, "Attempt to set color on a null or invalid window");
+        return 0;
+    }
+
+    int pair = (int) luaL_checknumber(L, 2);
+
+    if (pair <= 0 || pair > COLOR_PAIRS) {
+        luaL_error(L, "Invalid color pair number: %d (%d)", pair, COLOR_PAIRS);
+        return 0;
+    }
+
+    if (lua_istable(L, 1)) {
+        lua_getfield(L, 1, "color_pair");
+        if(lua_isinteger(L, -1)) {
+            int prev_pair = lua_tointeger(L, -1);
+            wattroff(win, COLOR_PAIR(prev_pair));
+        }
+        lua_pop(L, 1);
+
+        lua_pushinteger(L, pair);
+        lua_setfield(L, 1, "color_pair");
+    }
+
+    wattron(win, COLOR_PAIR(pair));
+
+    return 0;
+}
+
+int lua_window_clear_color(lua_State* L) {
+    WINDOW* win = get_subwindow(L);
+    if (!win) {
+        luaL_error(L, "Attempt to set color on a null or invalid window");
+        return 0;
+    }
+
+    lua_getfield(L, 1, "color_pair");
+    if(lua_isinteger(L, -1)) {
+        int prev_pair = lua_tointeger(L, -1);
+        wattroff(win, COLOR_PAIR(prev_pair));
+    }
+    lua_pop(L, 1);
+
+    lua_pushnil(L);
+    lua_setfield(L, 1, "color_pair");
+
+    return 0;
+}
 
 int lua_create_window(lua_State* L) {
     luaL_checktype(L, 1, LUA_TTABLE);
 
     if(!initialized) {
-       if (initscr() == nullptr) {
+        if (initscr() == nullptr) {
             luaL_error(L, "Error initializing ncurses.\n");
             return 0;
         }
 
         noecho();
         cbreak();
+        start_color();
         keypad(stdscr, TRUE);
         initialized = true;
         
@@ -249,8 +328,20 @@ int lua_create_window(lua_State* L) {
     lua_pushcfunction(L, lua_move_window);
     lua_setfield(L, -2, "move");
 
+    lua_pushcfunction(L, lua_resize_window);
+    lua_setfield(L, -2, "resize");
+
     lua_pushcfunction(L, lua_move_cursor);
     lua_setfield(L, -2, "set_cursor");
+
+    lua_pushcfunction(L, lua_window_set_color);
+    lua_setfield(L, -2, "set_color");
+
+    lua_pushcfunction(L, lua_window_clear_color);
+    lua_setfield(L, -2, "clear_color");
+
+    lua_pushnil(L);
+    lua_setfield(L, -2, "color_pair");
 
     lua_pushnumber(L, height);
     lua_setfield(L, -2, "height");
@@ -456,6 +547,36 @@ int mt_main_index(lua_State* L) {
     return 1;
 }
 
+int lua_init_pair(lua_State* L) {
+    int pair = (int) luaL_checknumber(L, 1);
+    int color_1 = (int) luaL_checknumber(L, 2);
+    int color_2 = (int) luaL_checknumber(L, 3);
+
+    init_extended_pair(pair, color_1, color_2);
+    return 0;
+}
+
+int lua_init_curse(lua_State* L) {
+    if(!initialized) {
+        if (initscr() == nullptr) {
+            luaL_error(L, "Error initializing ncurses.\n");
+            return 0;
+        }
+
+        noecho();
+        cbreak();
+        start_color();
+        keypad(stdscr, TRUE);
+        initialized = true;
+        
+        lua_getglobal(L, "ui");
+        lua_pushlightuserdata(L, stdscr);
+        lua_setfield(L, -2, "main_window");
+    }
+
+    return 0;
+}
+
 void load_ui_library(lua_State* L) {
     lua_newtable(L);
 
@@ -473,6 +594,19 @@ void load_ui_library(lua_State* L) {
 
     lua_pushcfunction(L, lua_create_window);
     lua_setfield(L, -2, "create");
+
+    lua_pushcfunction(L, lua_init_curse);
+    lua_setfield(L, -2, "init");
+
+    lua_newtable(L);
+    for (int i = 0; i < 8; ++i) {
+        lua_pushinteger(L, i);
+        lua_setfield(L, -2, color_names[i]);
+    }   
+    lua_setfield(L, -2, "color");
+
+    lua_pushcfunction(L, lua_init_pair);
+    lua_setfield(L, -2, "init_pair");
 
     lua_newtable(L);
 
