@@ -8,6 +8,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBXML2 REQUIRED libxml-2.0)
 
+find_package(Curses REQUIRED)
+
 file(GLOB CXX_SOURCES "src/*.c*" "src/lua/*.c*")
 message(STATUS "C++ Sources: ${CXX_SOURCES}")
 
@@ -48,12 +50,14 @@ target_include_directories(download PRIVATE
     ${LIBCURL_INCLUDE_DIR}
     ${JSONCPP_INCLUDE_DIR}
     ${LIBXML2_INCLUDE_DIRS}
+    ${CURSES_INCLUDE_DIR}
 )
 
 target_link_libraries(download PRIVATE 
     ${LIBCURL_LIBRARY}
     ${JSONCPP_LIBRARY}
     ${LIBXML2_LIBRARIES}
+    ${CURSES_LIBRARIES}
     lua
 )
 

@@ -1,25 +1,25 @@
-#include "json/writer.h"
 #include <cstdio>
 #include <cstdlib>
 #include <string>
 #include <filesystem>
-#include <iostream>
 #include <fstream>
 
 #include <json/value.h>
+#include <json/writer.h>
 
 #include "args.h"
 
 #include "lua/request.h"
 #include "lua/json.h"
 #include "lua/parser.h"
+#include "lua/ui.h"
 
 extern "C" {
     #include <curl/curl.h>
     #include <lua.h>
     #include <lauxlib.h>
     #include <lualib.h>
-    #include <dirent.h>
+    #include <curses.h>
 }
 
 #define USAGE "ani-download <name> [tags]\n\n" \
@@ -33,12 +33,6 @@ std::string cores_dir = config_dir + "/cores";
 std::string modules_dir = config_dir + "/modules";
 std::string configs_dir = config_dir + "/configs";
 std::string settings_path = config_dir + "/settings.json";
-
-void cleanup(lua_State* L) {
-    lua_close(L);
-    curl_global_cleanup();
-    exit(EXIT_SUCCESS);
-}
 
 typedef struct Flags {
     std::string name;
@@ -183,6 +177,7 @@ int main(int argc, char** argv) {
     curl_global_init(CURL_GLOBAL_ALL);
     lua_State* L = luaL_newstate();
     if(L == nullptr) {
+        curl_global_cleanup();
         fprintf(stderr, "Failed to allocate lua state.");
         return EXIT_FAILURE;
     }
@@ -192,6 +187,7 @@ int main(int argc, char** argv) {
     load_request_library(L);
     load_html_library(L);
     load_system_paths(L);
+    load_ui_library(L); 
 
     add_package_path(L, modules_dir);
 
@@ -218,7 +214,16 @@ int main(int argc, char** argv) {
     if(!flags.core.empty())
         call_core(L);
 
-    cleanup(L);
+    if (stdscr) {
+        wrefresh(stdscr);
+
+        delwin(stdscr);
+
+        endwin();
+    }
+    lua_close(L);
+    curl_global_cleanup();
+    exit(EXIT_SUCCESS);
 
     return EXIT_FAILURE;
 }
