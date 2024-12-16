@@ -8,10 +8,11 @@ A personal tool for downloading anime.
 ### Required Packages
 - libxml
 - lua
+- ncurses
 
-### Arch
+### Arch Linux
 ```bash
-sudo pacman -S lua libxml2
+sudo pacman -S lua libxml2 ncurses
 ```
 
 ### Building
@@ -45,14 +46,14 @@ ani-download "clannad after story" -c nyaa
 ## Lua
 
 ### Guides
-- [Creating a core](./docs/cores.md)
+- [Creating a core](./docs/guides/cores.md)
 - [XPath reference](https://quickref.me/xpath.html)
 
 ### Libraries
 This project includes a collection of built-in Lua libraries to enhance functionality.
 
-- [JSON](./docs/json.md) - Library for encoding and decoding JSON.
-- [Requests](./docs/requests.md) - HTTP request handling library.
-- [HTML](./docs/html.md) - Library for parsing and querying HTML documents.
-
+- [JSON](./docs/lua/json.md) - Library for encoding and decoding JSON.
+- [Requests](./docs/lua/requests.md) - HTTP request handling library.
+- [HTML](./docs/lua/html.md) - Library for parsing and querying HTML documents.
+- [UI](./docs/lua/ui.md) - UI library that uses ncurses.
 ---

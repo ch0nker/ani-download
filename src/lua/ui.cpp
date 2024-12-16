@@ -1,3 +1,5 @@
+#include <climits>
+#include <clocale>
 #include <cstdlib>
 #include <cstring>
 
@@ -8,6 +10,7 @@ extern "C" {
 }
 
 bool initialized = false;
+int color_pairs = 0;
 const char* color_names[] = {
     "black", "red", "green", "yellow",
     "blue", "magenta", "cyan", "white"
@@ -96,7 +99,13 @@ int lua_print_window(lua_State* L) {
     int y = (int)luaL_checknumber(L, 3);
     const char* text = luaL_checkstring(L, 4);
 
-    mvwaddstr(win, y, x, text);
+    setlocale(LC_ALL, "en_US.UTF-8");
+
+    size_t len = mbstowcs(NULL, text, 0) + 1;
+    wchar_t* wide_text = (wchar_t*)malloc(len * sizeof(wchar_t));
+    mbstowcs(wide_text, text, len);
+
+    mvwaddwstr(win, y, x, wide_text);
     wrefresh(win);
 
     return 0;
@@ -207,10 +216,22 @@ int lua_window_set_color(lua_State* L) {
         return 0;
     }
 
-    int pair = (int) luaL_checknumber(L, 2);
+    const char* pair_name = luaL_checkstring(L, 2);
 
-    if (pair <= 0 || pair > COLOR_PAIRS) {
-        luaL_error(L, "Invalid color pair number: %d (%d)", pair, COLOR_PAIRS);
+    lua_getglobal(L, "ui");
+    lua_getfield(L, -1, "color_pairs");
+
+    lua_getfield(L, -1, pair_name);
+    if (!lua_isinteger(L, -1)) {
+        luaL_error(L, "Color pair '%s' is not a valid number", pair_name);
+        return 0;
+    }
+
+    int pair = lua_tointeger(L, -1);
+    lua_pop(L, 3);
+
+    if (pair <= 0 || pair > color_pairs) {
+        luaL_error(L, "Invalid color pair number: %d (%d)", pair, color_pairs);
         return 0;
     }
 
@@ -300,7 +321,7 @@ int lua_create_window(lua_State* L) {
     int height = luaL_checkinteger(L, -1);
     lua_pop(L, 1);
 
-    WINDOW* new_window = subwin(main, height, width, x, y);
+    WINDOW* new_window = subwin(main, height, width, y, x);
     if (!new_window) {
         luaL_error(L, "Failed to create subwindow: dimensions out of bounds");
         return 0;
@@ -530,16 +551,10 @@ int mt_main_index(lua_State* L) {
     const char* key = lua_tostring(L, 2);
 
     if(strcmp(key, "cols") == 0) {
-        int row, col;
-        getmaxyx(stdscr, row, col);
-
-        lua_pushnumber(L, col);
+        lua_pushnumber(L, COLS);
         return 1;
-    } else if(strcmp(key, "rows") == 0) {
-        int row, col;
-        getmaxyx(stdscr, row, col);
-
-        lua_pushnumber(L, row);
+    } else if(strcmp(key, "rows") == 0 || strcmp(key, "lines") == 0) {
+        lua_pushnumber(L, LINES);
         return 1;
     }
 
@@ -548,9 +563,24 @@ int mt_main_index(lua_State* L) {
 }
 
 int lua_init_pair(lua_State* L) {
-    int pair = (int) luaL_checknumber(L, 1);
+    const char* pair_name = luaL_checkstring(L, 1);
     int color_1 = (int) luaL_checknumber(L, 2);
     int color_2 = (int) luaL_checknumber(L, 3);
+
+    lua_getglobal(L, "ui");
+    lua_getfield(L, -1, "color_pairs");
+
+    int pair = ++color_pairs;
+
+    if (pair > COLOR_PAIRS) {
+        luaL_error(L, "Maximum number of color pairs reached: %d", COLOR_PAIRS);
+        return 0;
+    }
+
+    lua_pushinteger(L, pair);
+    lua_setfield(L, -2, pair_name);
+
+    lua_pop(L, 2);
 
     init_extended_pair(pair, color_1, color_2);
     return 0;
@@ -571,6 +601,20 @@ int lua_init_curse(lua_State* L) {
         
         lua_getglobal(L, "ui");
         lua_pushlightuserdata(L, stdscr);
+        lua_setfield(L, -2, "main_window");
+    }
+
+    return 0;
+}
+
+int lua_end_ncurse(lua_State* L) {
+    if(initialized) {
+        wrefresh(stdscr);
+        delwin(stdscr);
+        endwin();
+
+        lua_getglobal(L, "ui");
+        lua_pushnil(L);
         lua_setfield(L, -2, "main_window");
     }
 
@@ -598,6 +642,9 @@ void load_ui_library(lua_State* L) {
     lua_pushcfunction(L, lua_init_curse);
     lua_setfield(L, -2, "init");
 
+    lua_pushcfunction(L, lua_end_ncurse);
+    lua_setfield(L, -2, "end");
+
     lua_newtable(L);
     for (int i = 0; i < 8; ++i) {
         lua_pushinteger(L, i);
@@ -605,8 +652,11 @@ void load_ui_library(lua_State* L) {
     }   
     lua_setfield(L, -2, "color");
 
+    lua_newtable(L);
+    lua_setfield(L, -2, "color_pairs");
+
     lua_pushcfunction(L, lua_init_pair);
-    lua_setfield(L, -2, "init_pair");
+    lua_setfield(L, -2, "init_color");
 
     lua_newtable(L);
 
