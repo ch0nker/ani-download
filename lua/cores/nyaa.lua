@@ -16,7 +16,14 @@ function nyaa.search(title, page)
     local parser = html.parse(response.data)
     local torrent_elms = parser:xpath("//tbody")[1]
     local amount = parser:xpath("//div[@class=\"pagination-page-info\"]")[1].text:match("out of (%d+) results.")
-    local max_page = parser:xpath("//ul[@class=\"pagination\"]/li[not(@class=\"next\") and not(contains(@class, \"disabled\"))][last()]")[1].text
+    local max_page = parser:xpath("//ul[@class=\"pagination\"]/li[not(@class=\"next\") and not(contains(@class, \"disabled\"))][last()]")
+    
+    if #max_page > 0 then
+        max_page = max_page[1].text
+    else
+        max_page = 1
+    end
+    
     local torrents = {}
 
     for _, elm in next, torrent_elms.children do
@@ -25,7 +32,7 @@ function nyaa.search(title, page)
         local comments = 0
 
         if comments_elm then
-            comments = tonumber(comments_elm.text:match("%s*(%d+)"))
+            comments = tonumber(comments_elm.text:match("(%d+)"))
         end
 
         local full_title = title_elm.attributes.title
@@ -45,7 +52,7 @@ function nyaa.search(title, page)
                 title = time_elm.attributes.title,
                 date = time_elm.text
             },
-            comments = comments,
+            comments = tonumber(comments),
             seeders = tonumber(elm.children[6].text),
             leechers = tonumber(elm.children[7].text),
             total_downloads = tonumber(elm.children[7].text)
@@ -70,13 +77,19 @@ function nyaa.get_torrent(title, page)
     local max_pages = math.ceil(amount / page_size)
 
     local current_window = "search"
+
     local control_window
+    local comments_window
+
     local window = ui.create({
         width = ui.cols,
         height = page_size + 5
     })
 
+    local comments_lines = {}
+
     local x, y = 1, 1
+    local cy = 1
     local space = 2
     local rows
 
@@ -84,6 +97,7 @@ function nyaa.get_torrent(title, page)
     ui.init_color("normal", ui.color.white, ui.color.black)
     ui.init_color("leech", ui.color.red, ui.color.black)
     ui.init_color("seed", ui.color.green, ui.color.black)
+    ui.init_color("blue", ui.color.blue, ui.color.black)
 
     window:set_color("normal")
 
@@ -94,6 +108,118 @@ function nyaa.get_torrent(title, page)
 
         window:print(0, 2, line)
         window:print(window.width - #help_text - 2, 1, help_text)
+    end
+
+    local function output_comments()
+        comments_window:clear()
+
+        local display_height = comments_window.height - 2
+        local total_lines = #comments_lines
+
+        cy = math.max(1, math.min(total_lines - display_height + 1, cy))
+
+        for line_index = cy, math.min(cy + display_height - 1, total_lines) do
+            local line = comments_lines[line_index]
+            for _, info in next, line do
+                comments_window:set_color(info.color)
+                comments_window:print(info.x, info.y - cy + 1, info.text)
+                comments_window:clear_color()
+            end
+        end
+    end
+
+    local function show_comments(torrent)
+        current_window = "comments"
+
+        cy = 1
+
+        if torrent.comments == 0 then
+            local width = window.width < 40 and window.width or 40
+            local height = window.height < 5 and window.height or 5
+
+            comments_window = ui.create({
+                width = width,
+                height = height,
+                x = (window.width - width) / 2,
+                y = (window.height - height) / 2
+            })
+
+            comments_window:clear()
+
+            local text = "This post doesn't have any comments."
+            comments_window:print((width - #text) / 2, height / 2, text)
+            return
+        end
+
+        local c_response = requests.get({url = torrent.link})
+        local parser = html.parse(c_response.data)
+
+        local panels = parser:xpath("//div[@class=\"panel-body\"]")
+        local line = 1
+        comments_lines = {}
+
+        local function add_text(text, color, x)
+            if not comments_lines[line] then
+                table.insert(comments_lines, {})
+            end
+
+            table.insert(comments_lines[line], {
+                text = text,
+                color = color,
+                x = x,
+                y = line
+            })
+        end
+        local width = ui.cols - 2
+        local line_break = "├" .. string.rep("─", width) .. "┤"
+
+        for _, panel in next, panels do
+            local username = panel:xpath(".//div[@class=\"col-md-2\"]/p")
+
+            if #username == 0 then
+                goto continue
+            end
+
+            username = username[1].text:gsub("\n", ""):gsub("\t", "")
+            local details = panel:xpath(".//div[contains(@class, \"comment-details\")]")[1]
+
+            local timestamps = details:xpath(".//small")
+            local edited = #timestamps > 1
+
+            local epoch = tonumber(timestamps[1].attributes["data-timestamp"])
+            local timestamp = os.date("%Y-%m-%d %H:%M", epoch)
+
+            local content = panel:xpath(".//div[contains(@class, \"comment-body\")]/div[@class=\"comment-content\"]")[1].text
+
+            add_text(username, username:match("(uploader)") and "seed" or "blue", 1)
+            add_text(timestamp, "blue", ui.cols - #timestamp - 1)
+            if edited then
+                local edited_text = "(edited)"
+                add_text(edited_text, "normal", ui.cols - #timestamp - 2 - #edited_text)
+            end
+            line = line + 1
+            add_text(line_break, "normal", 0)
+            line = line + 1
+            for c_line in (content .. "\n"):gmatch("(.-)\n") do
+                while #c_line > 0 do
+                    local chunk = c_line:sub(1, ui.cols - 2)
+                    add_text(chunk, "normal", 1)
+                    c_line = c_line:sub(#chunk + 1)
+                    line = line + 1
+                end
+            end
+            add_text(line_break, "normal", 0)
+            line = line + 1
+
+            ::continue::
+        end
+
+        comments_window = ui.create({
+            width = ui.cols,
+            height = ui.rows
+        })
+
+        output_comments()
     end
 
     local function show_controls()
@@ -136,18 +262,26 @@ function nyaa.get_torrent(title, page)
         window:print(window.width - (#info_text + 1), line + space, info_text)
         window:set_color("leech")
         window:print(window.width - (#leech_text + 2), line + space, leech_text)
-        window:clear_color()
         window:set_color("seed")
         window:print(window.width - (#leech_text + 5 + #seed_text), line + space, seed_text)
-        window:clear_color()
+
+        local comments_text = torrent.comments > 0 and string.format("[%d comments] ", torrent.comments) or ""
+        if comments_text ~= "" then
+            window:clear_color()
+            window:print(window.width - (#leech_text + 6 + #seed_text + #comments_text), line + space, comments_text)
+            window:set_color("blue")
+            window:print(window.width - (#leech_text + 5 + #seed_text + #comments_text), line + space, torrent.comments)
+        end
+
+        local size_text = string.format(" (%s)", torrent.size)
 
         if selected then
             window:set_color("select")
-            window:print(1, line + space, string.format("%s (%s)", torrent.full_title:gsub("[^\x00-\x7F]", ""):sub(x, x + (window.width - #info_text - (#torrent.size + 5))), torrent.size))
+            window:print(1, line + space, string.format("%s%s", torrent.full_title:gsub("[^\x00-\x7F]", ""):sub(x, x + (window.width - #comments_text - #info_text - #size_text - 2)), size_text))
             window:clear_color()
         else
-            window:set_color("normal")
-            window:print(1, line + space, string.format("%s (%s)", torrent.full_title:gsub("[^\x00-\x7F]", ""):sub(1, window.width - #info_text - (#torrent.size + 5)), torrent.size))
+            window:set_color(torrent.status == "danger" and "leech" or torrent.status == "success" and "seed" or "normal")
+            window:print(1, line + space, string.format("%s%s", torrent.full_title:gsub("[^\x00-\x7F]", ""):sub(1, window.width - #comments_text - #info_text - #size_text - 1), size_text))
             window:clear_color()
         end
     end
@@ -198,16 +332,35 @@ function nyaa.get_torrent(title, page)
                 current_window = "search"
                 return true
             end
+
+            if current_window == "comments" then
+                comments_window:destroy()
+                output_page()
+                current_window = "search"
+                return true
+            end
             return false
         end
 
         if current_window == "comments" then
+            if key == "UP" then
+                cy = math.max(1, cy - 1)
+                output_comments()
+                return true
+            elseif key == "DOWN" then
+                cy = math.min(#comments_lines, cy + 1)
+                output_comments()
+                return true
+            end
+
             return true
         end
 
         if current_window ~= "search" then
             return true
         end
+
+        local torrent = torrents[start_index + y - 1]
 
         if key == "n" then
             page = page + 1
@@ -216,7 +369,7 @@ function nyaa.get_torrent(title, page)
             output_page()
             return true
         elseif key == "\n" then
-            result = torrents[start_index + y - 1]
+            result = torrent
             return false
         elseif key == "p" then
             page = page - 1
@@ -227,9 +380,10 @@ function nyaa.get_torrent(title, page)
         elseif key == "?" then
             show_controls()
             return true
+        elseif key == "c" then
+            show_comments(torrent)
+            return true
         end
-
-        local torrent = torrents[start_index + y - 1]
 
         print_torrent(torrent, y, false)
 
@@ -247,9 +401,12 @@ function nyaa.get_torrent(title, page)
 
         if key == "RIGHT" then
             local text_length = #torrent.full_title:gsub("[^\x00-\x7F]", "")
-            if x + (window.width - (#torrent.size + 6)) < text_length then
-                x = math.min(x + 1, text_length - (window.width - (#torrent.size + 6)))
-            end
+            local leech_text = string.format("%d", torrent.leechers)
+            local seed_text = string.format("%d", torrent.seeders)
+            local info_text = string.format(" [%d] [%d]", seed_text, leech_text)
+            local comments_text = torrent.comments > 0 and string.format("[%d comments] ", torrent.comments) or ""
+            local available_width = window.width - #info_text - #comments_text - (#torrent.size + 6)
+            x = math.max(1, math.min(x + 1, text_length - available_width - 1))
         end
 
         print_torrent(torrent, y, true)
