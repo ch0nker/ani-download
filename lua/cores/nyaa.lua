@@ -425,7 +425,6 @@ local function download(title)
 
     if not torrent then return end
 
-    os.execute("qbittorrent")
     qbit.download_magnet(torrent.magnet)
 end
 
